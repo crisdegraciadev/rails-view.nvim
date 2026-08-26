@@ -1,4 +1,10 @@
+local project = require("rails-view.project")
+local util = require("rails-view.util")
+
 local M = {}
+
+-- root -> { fingerprint = string, routes = table[] }
+local memory = {}
 
 --- Reads the output of `rails routes --expanded`, which prints one block
 --- per route:
@@ -58,6 +64,61 @@ function M.parse(output)
   flush()
 
   return routes
+end
+
+--- Returns the cached routing table, or nil when there is none for the
+--- current state of the route files.
+---@param root string
+---@return table[]|nil
+function M.load_cache(root)
+  local fingerprint = project.fingerprint(root)
+
+  local cached = memory[root]
+  if cached and cached.fingerprint == fingerprint then
+    return cached.routes
+  end
+
+  local contents = util.read_file(project.cache_path(root))
+  if not contents then
+    return nil
+  end
+
+  local ok, decoded = pcall(vim.json.decode, contents)
+  if not ok or type(decoded) ~= "table" or type(decoded.routes) ~= "table" then
+    return nil
+  end
+  if decoded.fingerprint ~= fingerprint then
+    return nil
+  end
+
+  memory[root] = { fingerprint = fingerprint, routes = decoded.routes }
+  return decoded.routes
+end
+
+---@param root string
+---@param routes table[]
+function M.save_cache(root, routes)
+  local fingerprint = project.fingerprint(root)
+  memory[root] = { fingerprint = fingerprint, routes = routes }
+
+  -- Compiled patterns are per-session state, not data worth storing.
+  local plain = vim.tbl_map(function(route)
+    local copy = vim.deepcopy(route)
+    copy.patterns = nil
+    return copy
+  end, routes)
+
+  util.write_file(
+    project.cache_path(root),
+    vim.json.encode({ fingerprint = fingerprint, routes = plain })
+  )
+end
+
+--- Drops the cache for a project, in memory and on disk.
+---@param root string
+function M.invalidate(root)
+  memory[root] = nil
+  os.remove(project.cache_path(root))
 end
 
 return M
