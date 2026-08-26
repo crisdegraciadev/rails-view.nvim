@@ -1,0 +1,42 @@
+--[ Route 1 ]-------------------------------------------------------------------
+Prefix            | 
+Verb              | 
+URI               | /cable
+Controller#Action | #<ActionCable::Server::Base:0x000000012a6c32b8 @mount_path="/cable">
+Source Location   | config/routes.rb:8
+--[ Route 2 ]-------------------------------------------------------------------
+Prefix            | root
+Verb              | GET
+URI               | /
+Controller#Action | sessions#new
+Source Location   | config/routes.rb:11
+--[ Route 3 ]-------------------------------------------------------------------
+Prefix            | company_jobs
+Verb              | GET
+URI               | /companies/:company_id/jobs(.:format)
+Controller#Action | companies/recruiting/jobs#index
+Source Location   | config/routes.rb:553
+--[ Route 4 ]-------------------------------------------------------------------
+Prefix            | 
+Verb              | POST
+URI               | /companies/:company_id/jobs(.:format)
+Controller#Action | companies/recruiting/jobs#create
+Source Location   | config/routes.rb:553
+--[ Route 5 ]-------------------------------------------------------------------
+Prefix            | edit_company_job
+Verb              | GET
+URI               | /companies/:company_id/jobs/:id/edit(.:format)
+Controller#Action | companies/recruiting/jobs#edit
+Source Location   | config/routes.rb:554
+--[ Route 6 ]-------------------------------------------------------------------
+Prefix            | api_v3_sessions
+Verb              | POST
+URI               | /api/v:version/sessions(.:format)
+Controller#Action | api/v3/sessions#create {format: :json, version: /2|3/}
+Source Location   | config/routes.rb:79
+--[ Route 7 ]-------------------------------------------------------------------
+Prefix            | rails_service_blob
+Verb              | GET
+URI               | /rails/active_storage/blobs/redirect/:signed_id/*filename(.:format)
+Controller#Action | active_storage/blobs/redirect#show
+Source Location   | config/routes.rb:1
