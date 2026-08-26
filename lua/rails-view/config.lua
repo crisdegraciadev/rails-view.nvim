@@ -15,6 +15,14 @@ local defaults = {
 
   cache_dir = vim.fn.stdpath("cache") .. "/rails-view",
 
+  -- How a resolved file is opened: "edit", "split", "vsplit", "tabedit".
+  open_cmd = "edit",
+
+  -- "auto"   opens the best candidate straight away, and :RailsView!
+  --          asks instead
+  -- "always" asks whenever there is more than one candidate
+  pick = "auto",
+
   -- Verb assumed for a URL that carries none.
   default_verb = "GET",
 
