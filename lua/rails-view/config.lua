@@ -15,6 +15,11 @@ local defaults = {
 
   cache_dir = vim.fn.stdpath("cache") .. "/rails-view",
 
+  -- How many routing tables to keep per project. One per state of the route
+  -- files, so this is roughly how many branches can be moved between before
+  -- the oldest has to be rebuilt.
+  cache_entries = 5,
+
   -- How a resolved file is opened: "edit", "split", "vsplit", "tabedit".
   open_cmd = "edit",
 

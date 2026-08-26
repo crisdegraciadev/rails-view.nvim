@@ -4,7 +4,7 @@ local util = require("rails-view.util")
 
 local M = {}
 
--- root -> { fingerprint = string, routes = table[] }
+-- "<root>\0<fingerprint>" -> routes, so several branches can be held at once
 local memory = {}
 
 -- root -> callbacks waiting on the build already in flight
@@ -70,19 +70,33 @@ function M.parse(output)
   return routes
 end
 
---- Returns the cached routing table, or nil when there is none for the
---- current state of the route files.
+local function memory_key(root, fingerprint)
+  return root .. "\0" .. fingerprint
+end
+
+--- Drops the least recently used tables beyond cache_entries.
+local function prune(root)
+  local files = project.cache_files(root)
+
+  for index = config.options.cache_entries + 1, #files do
+    os.remove(files[index])
+  end
+end
+
+--- Returns the cached routing table for the current state of the route
+--- files, or nil when it has not been built yet.
 ---@param root string
 ---@return table[]|nil
 function M.load_cache(root)
   local fingerprint = project.fingerprint(root)
+  local key = memory_key(root, fingerprint)
 
-  local cached = memory[root]
-  if cached and cached.fingerprint == fingerprint then
-    return cached.routes
+  if memory[key] then
+    return memory[key]
   end
 
-  local contents = util.read_file(project.cache_path(root))
+  local path = project.cache_path(root, fingerprint)
+  local contents = util.read_file(path)
   if not contents then
     return nil
   end
@@ -92,10 +106,15 @@ function M.load_cache(root)
     return nil
   end
   if decoded.fingerprint ~= fingerprint then
-    return nil
+    return nil -- a slug collision; the file belongs to another project
   end
 
-  memory[root] = { fingerprint = fingerprint, routes = decoded.routes }
+  -- Reading counts as use: pruning goes by how recently a table was wanted,
+  -- not by when it happened to be built.
+  local now = os.time()
+  vim.uv.fs_utime(path, now, now)
+
+  memory[key] = decoded.routes
   return decoded.routes
 end
 
@@ -103,7 +122,7 @@ end
 ---@param routes table[]
 function M.save_cache(root, routes)
   local fingerprint = project.fingerprint(root)
-  memory[root] = { fingerprint = fingerprint, routes = routes }
+  memory[memory_key(root, fingerprint)] = routes
 
   -- Compiled patterns are per-session state, not data worth storing.
   local plain = vim.tbl_map(function(route)
@@ -113,9 +132,11 @@ function M.save_cache(root, routes)
   end, routes)
 
   util.write_file(
-    project.cache_path(root),
+    project.cache_path(root, fingerprint),
     vim.json.encode({ fingerprint = fingerprint, routes = plain })
   )
+
+  prune(root)
 end
 
 --- Runs the routes command and caches what it prints.
@@ -185,11 +206,19 @@ function M.get(root, callback)
   M.refresh(root, callback)
 end
 
---- Drops the cache for a project, in memory and on disk.
+--- Drops every cached routing table for a project, in memory and on disk.
 ---@param root string
 function M.invalidate(root)
-  memory[root] = nil
-  os.remove(project.cache_path(root))
+  local prefix = root .. "\0"
+  for key in pairs(memory) do
+    if key:sub(1, #prefix) == prefix then
+      memory[key] = nil
+    end
+  end
+
+  for _, file in ipairs(project.cache_files(root)) do
+    os.remove(file)
+  end
 end
 
 return M

@@ -20,26 +20,29 @@ local function check_routes_cmd(root)
 end
 
 local function check_cache(root)
-  local path = project.cache_path(root)
-  local contents = util.read_file(path)
-
-  if not contents then
-    vim.health.info("No cached routing table yet; it is built on first use")
+  local files = project.cache_files(root)
+  if #files == 0 then
+    vim.health.info("No routing table cached yet; the first jump builds one")
     return
   end
 
-  local ok, decoded = pcall(vim.json.decode, contents)
+  local current = project.cache_path(root, project.fingerprint(root))
+  local summary = ("Cache: %d of %d routing tables in %s")
+    :format(#files, config.options.cache_entries, config.options.cache_dir)
+
+  if not vim.uv.fs_stat(current) then
+    vim.health.warn(summary .. ", none for the current route files; the next jump rebuilds")
+    return
+  end
+
+  local contents = util.read_file(current)
+  local ok, decoded = pcall(vim.json.decode, contents or "")
   if not ok or type(decoded) ~= "table" or type(decoded.routes) ~= "table" then
-    vim.health.warn("Cache file cannot be read: " .. path)
+    vim.health.warn("Cache file cannot be read: " .. current)
     return
   end
 
-  local summary = ("Cache: %d routes (%s)"):format(#decoded.routes, path)
-  if decoded.fingerprint == project.fingerprint(root) then
-    vim.health.ok(summary)
-  else
-    vim.health.warn(summary .. " - stale, it will be rebuilt on next use")
-  end
+  vim.health.ok(("%s; the current one holds %d routes"):format(summary, #decoded.routes))
 end
 
 function M.check()

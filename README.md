@@ -107,10 +107,14 @@ mark optional parts, and when several routes match, the first one in definition
 order wins, exactly as it would in the running application.
 
 Printing the table means booting Rails, which takes tens of seconds on a large
-application, so the result is cached per project in
-`stdpath("cache")/rails-view/`. The cache is keyed by the size and mtime of
-every route file, which is what makes it expire on its own. The command runs
-through `vim.system`, so the editor stays usable while it does.
+application, so the result is cached in `stdpath("cache")/rails-view/` and the
+command runs through `vim.system`, keeping the editor usable while it does.
+
+Each cached table is keyed by a hash of the route files' contents, so it
+expires on its own when the routes change and, just as importantly, does not
+expire when they do not: git rewrites those files on every checkout and rebase.
+The last `cache_entries` tables are kept per project, so moving between
+branches reuses what was already built instead of booting Rails again.
 
 ## Development
 

@@ -30,22 +30,53 @@ describe("project.route_files", function()
 end)
 
 describe("project.fingerprint", function()
-  it("changes when a route file changes", function()
-    local app = helpers.temp_app()
-    local before = project.fingerprint(app)
-    assert.is_true(#before > 0)
+  local app
 
-    vim.fn.writefile({ "# a new route file" }, app .. "/config/routes/api.rb")
-    local after = project.fingerprint(app)
+  before_each(function()
+    app = helpers.temp_app()
+  end)
+
+  after_each(function()
     helpers.remove(app)
+  end)
 
-    assert.are_not.equals(before, after)
+  it("changes when a route file changes", function()
+    local before = project.fingerprint(app)
+    vim.fn.writefile({ "# a new route file" }, app .. "/config/routes/api.rb")
+
+    assert.are_not.equals(before, project.fingerprint(app))
+  end)
+
+  it("survives a touch, which is what git checkout does to these files", function()
+    local before = project.fingerprint(app)
+
+    local later = os.time() + 120
+    vim.uv.fs_utime(app .. "/config/routes.rb", later, later)
+
+    assert.equals(before, project.fingerprint(app))
+  end)
+
+  it("comes back to the same value when the contents come back", function()
+    local original = vim.fn.readfile(app .. "/config/routes.rb")
+    local before = project.fingerprint(app)
+
+    vim.fn.writefile({ "# on another branch" }, app .. "/config/routes.rb")
+    local other = project.fingerprint(app)
+
+    vim.fn.writefile(original, app .. "/config/routes.rb")
+
+    assert.are_not.equals(before, other)
+    assert.equals(before, project.fingerprint(app))
   end)
 end)
 
 describe("project.cache_path", function()
   it("gives each project its own file", function()
-    assert.are_not.equals(project.cache_path("/one/app"), project.cache_path("/another/app"))
-    assert.is_truthy(project.cache_path("/one/app"):match("%.json$"))
+    assert.are_not.equals(project.cache_path("/one/app", "abc"), project.cache_path("/another/app", "abc"))
+    assert.is_truthy(project.cache_path("/one/app", "abc"):match("%.json$"))
+  end)
+
+  it("gives each state of the route files its own file", function()
+    assert.are_not.equals(project.cache_path("/one/app", "abc"), project.cache_path("/one/app", "def"))
   end)
 end)
