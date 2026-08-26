@@ -17,6 +17,22 @@ local defaults = {
 
   -- Verb assumed for a URL that carries none.
   default_verb = "GET",
+
+  -- Where templates and controllers live, relative to the root.
+  view_dirs = { "app/views" },
+  controller_dirs = { "app/controllers" },
+
+  -- Which template wins when an action has more than one. Compared against
+  -- the end of the filename; anything else .html.* sorts just behind these.
+  template_priority = {
+    "html.erb",
+    "html.slim",
+    "html.haml",
+    "turbo_stream.erb",
+    "turbo_stream.slim",
+    "js.erb",
+    "json.jbuilder",
+  },
 }
 
 M.options = vim.deepcopy(defaults)
