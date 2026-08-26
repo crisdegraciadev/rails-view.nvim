@@ -1,3 +1,4 @@
+local config = require("rails-view.config")
 local project = require("rails-view.project")
 local util = require("rails-view.util")
 
@@ -5,6 +6,9 @@ local M = {}
 
 -- root -> { fingerprint = string, routes = table[] }
 local memory = {}
+
+-- root -> callbacks waiting on the build already in flight
+local pending = {}
 
 --- Reads the output of `rails routes --expanded`, which prints one block
 --- per route:
@@ -112,6 +116,73 @@ function M.save_cache(root, routes)
     project.cache_path(root),
     vim.json.encode({ fingerprint = fingerprint, routes = plain })
   )
+end
+
+--- Runs the routes command and caches what it prints.
+---
+--- Callers arriving while a build is in flight wait on that one instead of
+--- booting Rails a second time.
+---@param root string
+---@param callback fun(routes: table[]|nil, err: string|nil)
+function M.refresh(root, callback)
+  if pending[root] then
+    table.insert(pending[root], callback)
+    return
+  end
+  pending[root] = { callback }
+
+  local function finish(routes, err)
+    local waiting = pending[root]
+    pending[root] = nil
+    for _, waiter in ipairs(waiting) do
+      waiter(routes, err)
+    end
+  end
+
+  local cmd = config.options.routes_cmd
+  util.notify(("Building the routing table with `%s`..."):format(table.concat(cmd, " ")))
+
+  vim.system(cmd, { cwd = root, text = true, timeout = config.options.routes_timeout }, function(result)
+    -- vim.system calls back off the main loop, where the editor API is off limits.
+    vim.schedule(function()
+      if result.code ~= 0 then
+        local stderr = vim.trim(result.stderr or "")
+        finish(
+          nil,
+          ("`%s` exited with %d%s"):format(
+            table.concat(cmd, " "),
+            result.code,
+            stderr ~= "" and ("\n" .. stderr:sub(1, 500)) or ""
+          )
+        )
+        return
+      end
+
+      local routes = M.parse(result.stdout or "")
+      if #routes == 0 then
+        finish(nil, ("`%s` printed no routes this plugin could read"):format(table.concat(cmd, " ")))
+        return
+      end
+
+      M.save_cache(root, routes)
+      util.notify(("%d routes cached"):format(#routes))
+      finish(routes, nil)
+    end)
+  end)
+end
+
+--- The routing table for a project, from cache while it is still valid.
+--- The only entry point the rest of the plugin needs.
+---@param root string
+---@param callback fun(routes: table[]|nil, err: string|nil)
+function M.get(root, callback)
+  local cached = M.load_cache(root)
+  if cached then
+    callback(cached, nil)
+    return
+  end
+
+  M.refresh(root, callback)
 end
 
 --- Drops the cache for a project, in memory and on disk.
