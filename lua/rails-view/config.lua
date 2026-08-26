@@ -26,6 +26,9 @@ local defaults = {
   -- Verb assumed for a URL that carries none.
   default_verb = "GET",
 
+  -- Rebuild the routing table in the background after a route file is saved.
+  auto_refresh = true,
+
   -- Where templates and controllers live, relative to the root.
   view_dirs = { "app/views" },
   controller_dirs = { "app/controllers" },

@@ -41,3 +41,20 @@ end, { nargs = "?", desc = "Report what a Rails URL resolves to" })
 vim.api.nvim_create_user_command("RailsViewRefresh", function()
   rails_view().refresh()
 end, { desc = "Rebuild the cached routing table" })
+
+-- Saving a route file invalidates the cache. Rebuilding it now means the
+-- next jump is instant instead of paying for the boot right then.
+vim.api.nvim_create_autocmd("BufWritePost", {
+  group = vim.api.nvim_create_augroup("RailsViewRoutes", { clear = true }),
+  pattern = { "*/config/routes.rb", "*/config/routes/*.rb" },
+  callback = function()
+    if not require("rails-view.config").options.auto_refresh then
+      return
+    end
+
+    local root = require("rails-view.project").root()
+    if root then
+      require("rails-view.routes").refresh(root, function() end)
+    end
+  end,
+})
