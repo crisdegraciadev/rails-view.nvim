@@ -41,7 +41,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 | `:RailsViewController [url]` | Open the controller, cursor on the action. |
 | `:RailsViewAny [url]` | Pick between the views and the controller. |
 | `:RailsViewInfo [url]` | Report the route, its helper, its line in `routes.rb`, its templates and its controller. |
-| `:RailsViewRefresh` | Rebuild the cached routing table. |
+| `:RailsViewRefresh` | Rebuild the routing table. The only thing that does. |
 
 Called without an argument, the commands ask for a URL and offer the one under
 the cursor or the last one copied.
@@ -69,7 +69,7 @@ require("rails-view").setup({
   open_cmd = "edit",
   pick = "auto",
   default_verb = "GET",
-  auto_refresh = true,
+  auto_refresh = false,
   view_dirs = { "app/views" },
   controller_dirs = { "app/controllers" },
   template_priority = {
@@ -89,6 +89,9 @@ For Rails in a container:
 ```lua
 routes_cmd = { "docker", "compose", "exec", "-T", "web", "bin/rails", "routes", "--expanded" }
 ```
+
+`auto_refresh` rebuilds in the background after a route file is saved. It is
+off by default for the reason described below.
 
 `:checkhealth rails-view` reports the detected project, the routes command
 and the state of the cache.
@@ -110,11 +113,19 @@ Printing the table means booting Rails, which takes tens of seconds on a large
 application, so the result is cached in `stdpath("cache")/rails-view/` and the
 command runs through `vim.system`, keeping the editor usable while it does.
 
-Each cached table is keyed by a hash of the route files' contents, so it
-expires on its own when the routes change and, just as importantly, does not
-expire when they do not: git rewrites those files on every checkout and rebase.
-The last `cache_entries` tables are kept per project, so moving between
-branches reuses what was already built instead of booting Rails again.
+The table is built when there is none, and after that only when you ask:
+
+```
+:RailsViewRefresh
+```
+
+Nothing else rebuilds it. Expiring the cache automatically sounds right and is
+not: git rewrites the route files on every checkout, pull and rebase, so an
+automatic rule pays for a Rails boot several times a day. The cost of the
+trade is that a route added on the branch you just checked out is not there
+until you refresh, so a lookup that finds nothing says as much when the route
+files have changed since the table was built. `:checkhealth rails-view` reports
+the same thing.
 
 ## Development
 

@@ -1,14 +1,21 @@
 local config = require("rails-view.config")
 local helpers = require("tests.helpers")
+local project = require("rails-view.project")
 local routes = require("rails-view.routes")
+local util = require("rails-view.util")
 
 describe("the routes cache", function()
   local app, cache_dir
+
+  local function parsed()
+    return routes.parse(helpers.fixture("routes_expanded.txt"))
+  end
 
   before_each(function()
     app = helpers.temp_app()
     cache_dir = vim.fn.tempname()
     config.setup({ cache_dir = cache_dir })
+    routes.invalidate(app)
   end)
 
   after_each(function()
@@ -22,58 +29,46 @@ describe("the routes cache", function()
   end)
 
   it("gives back what was saved", function()
-    local parsed = routes.parse(helpers.fixture("routes_expanded.txt"))
-    routes.save_cache(app, parsed)
+    local table_ = parsed()
+    routes.save_cache(app, table_)
 
     local loaded = routes.load_cache(app)
-    assert.equals(#parsed, #loaded)
-    assert.equals(parsed[2].controller, loaded[2].controller)
+    assert.equals(#table_, #loaded)
+    assert.equals(table_[2].controller, loaded[2].controller)
   end)
 
-  it("refuses a cache written for different route files", function()
-    routes.save_cache(app, routes.parse(helpers.fixture("routes_expanded.txt")))
-    vim.fn.writefile({ "# changes the fingerprint" }, app .. "/config/routes/api.rb")
+  it("keeps serving the cached table after the route files change", function()
+    routes.save_cache(app, parsed())
+    vim.fn.writefile({ "# another branch, other routes" }, app .. "/config/routes.rb")
 
-    assert.is_nil(routes.load_cache(app))
+    assert.equals(#parsed(), #routes.load_cache(app))
   end)
 
-  it("still has the table for a branch after moving away and back", function()
-    local on_main = routes.parse(helpers.fixture("routes_expanded.txt"))
-    local main_routes = vim.fn.readfile(app .. "/config/routes.rb")
-    routes.save_cache(app, on_main)
+  it("writes a table the next session can pick up", function()
+    routes.save_cache(app, parsed())
 
-    -- Check out a branch whose routes differ, and build there too.
-    vim.fn.writefile({ "Rails.application.routes.draw do", "  # one more route", "end" }, app .. "/config/routes.rb")
-    assert.is_nil(routes.load_cache(app))
-    routes.save_cache(app, { on_main[1] })
-    assert.equals(1, #routes.load_cache(app))
-
-    -- Back to the first branch: nothing to rebuild.
-    vim.fn.writefile(main_routes, app .. "/config/routes.rb")
-    assert.equals(#on_main, #routes.load_cache(app))
+    local decoded = vim.json.decode(util.read_file(project.cache_path(app)))
+    assert.equals(#parsed(), #decoded.routes)
+    assert.is_true(decoded.built_at > 0)
+    assert.is_nil(decoded.routes[1].patterns)
   end)
 
-  it("keeps no more tables than cache_entries", function()
-    config.setup({ cache_dir = cache_dir, cache_entries = 2 })
-    local parsed = routes.parse(helpers.fixture("routes_expanded.txt"))
+  it("reports being out of date without acting on it", function()
+    routes.save_cache(app, parsed())
+    assert.is_false(routes.is_stale(app))
 
-    for index = 1, 4 do
-      vim.fn.writefile({ "# state " .. index }, app .. "/config/routes.rb")
-      routes.save_cache(app, parsed)
-    end
+    local later = os.time() + 60
+    vim.uv.fs_utime(app .. "/config/routes.rb", later, later)
 
-    assert.equals(2, #require("rails-view.project").cache_files(app))
+    assert.is_true(routes.is_stale(app))
+    assert.is_truthy(routes.load_cache(app))
   end)
 
-  it("invalidate drops every table for the project", function()
-    for index = 1, 2 do
-      vim.fn.writefile({ "# state " .. index }, app .. "/config/routes.rb")
-      routes.save_cache(app, routes.parse(helpers.fixture("routes_expanded.txt")))
-    end
-
+  it("is dropped by invalidate, which is what a refresh does first", function()
+    routes.save_cache(app, parsed())
     routes.invalidate(app)
 
-    assert.equals(0, #require("rails-view.project").cache_files(app))
     assert.is_nil(routes.load_cache(app))
+    assert.is_nil(vim.uv.fs_stat(project.cache_path(app)))
   end)
 end)

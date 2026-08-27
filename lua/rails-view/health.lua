@@ -20,29 +20,26 @@ local function check_routes_cmd(root)
 end
 
 local function check_cache(root)
-  local files = project.cache_files(root)
-  if #files == 0 then
+  local contents = util.read_file(project.cache_path(root))
+  if not contents then
     vim.health.info("No routing table cached yet; the first jump builds one")
     return
   end
 
-  local current = project.cache_path(root, project.fingerprint(root))
-  local summary = ("Cache: %d of %d routing tables in %s")
-    :format(#files, config.options.cache_entries, config.options.cache_dir)
-
-  if not vim.uv.fs_stat(current) then
-    vim.health.warn(summary .. ", none for the current route files; the next jump rebuilds")
-    return
-  end
-
-  local contents = util.read_file(current)
-  local ok, decoded = pcall(vim.json.decode, contents or "")
+  local ok, decoded = pcall(vim.json.decode, contents)
   if not ok or type(decoded) ~= "table" or type(decoded.routes) ~= "table" then
-    vim.health.warn("Cache file cannot be read: " .. current)
+    vim.health.warn("Cache file cannot be read: " .. project.cache_path(root))
     return
   end
 
-  vim.health.ok(("%s; the current one holds %d routes"):format(summary, #decoded.routes))
+  local built_at = decoded.built_at or 0
+  local summary = ("Cache: %d routes, built %s"):format(#decoded.routes, os.date("%Y-%m-%d %H:%M", built_at))
+
+  if project.routes_changed_at(root) > built_at then
+    vim.health.warn(summary .. "; the route files have changed since", { "Run :RailsViewRefresh to rebuild it" })
+  else
+    vim.health.ok(summary)
+  end
 end
 
 function M.check()

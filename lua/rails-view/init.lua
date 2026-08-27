@@ -112,7 +112,12 @@ local function with_matching_routes(input, handler)
     local exact, path_only = matcher.find(all, request.path, request.verb)
 
     if #exact == 0 and #path_only == 0 then
-      util.warn(("No route matches %s %s"):format(request.verb, request.path))
+      local message = ("No route matches %s %s"):format(request.verb, request.path)
+      if routes.is_stale(root) then
+        message = message .. "\nThe route files have changed since this table was built; :RailsViewRefresh rebuilds it"
+      end
+
+      util.warn(message)
       return
     end
 

@@ -15,11 +15,6 @@ local defaults = {
 
   cache_dir = vim.fn.stdpath("cache") .. "/rails-view",
 
-  -- How many routing tables to keep per project. One per state of the route
-  -- files, so this is roughly how many branches can be moved between before
-  -- the oldest has to be rebuilt.
-  cache_entries = 5,
-
   -- How a resolved file is opened: "edit", "split", "vsplit", "tabedit".
   open_cmd = "edit",
 
@@ -32,7 +27,10 @@ local defaults = {
   default_verb = "GET",
 
   -- Rebuild the routing table in the background after a route file is saved.
-  auto_refresh = true,
+  -- Off by default: a rebuild costs a full Rails boot, and the routing table
+  -- is otherwise only built when there is none or when :RailsViewRefresh
+  -- asks for one.
+  auto_refresh = false,
 
   -- Where templates and controllers live, relative to the root.
   view_dirs = { "app/views" },
